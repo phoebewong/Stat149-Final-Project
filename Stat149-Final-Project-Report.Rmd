@@ -7,6 +7,11 @@ output:
     number_sections: true
 ---
 
+```{r imports, include=FALSE}
+library(tidyverse)
+```
+
+
 # Background
 - Description of the problem and its importance
 - Description of data
@@ -15,6 +20,21 @@ output:
 # Exploratory Analyses
 - Key features of the data that will be relevant for modeling
 - Any data preprocessing?
+
+```{r read-in-data, echo=FALSE, warning=FALSE, message=FALSE}
+data <- read_csv("data/amidata.csv")
+```
+
+## EDA 
+### Response variable - Hospital legnth of stay
+
+```{r eda-response, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(data, aes(LOS)) +
+  geom_histogram() + 
+  labs(x = "Length of stay (Days)", y = "Count", 
+       title = "Histogram of hospital length of stay") +
+  theme_minimal()
+```
 
 # Model
 - Main models considered
