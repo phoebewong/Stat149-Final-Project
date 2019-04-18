@@ -1,0 +1,30 @@
+---
+title: "Stat149: Final Project Report"
+author: "Karina Huang, Nicholas Stern, Phoebe Wong"
+date: "4/18/2019"
+output: 
+  pdf_document:
+    number_sections: true
+---
+
+# Background
+- Description of the problem and its importance
+- Description of data
+- Goals of project
+
+# Exploratory Analyses
+- Key features of the data that will be relevant for modeling
+- Any data preprocessing?
+
+# Model
+- Main models considered
+- Decisions to consider alternative models
+
+# Conclusion
+- Substantive conclusions that would be important for a non-statistican
+- Report any prgamatic advice/conclusions result from the analysis
+
+# Discussion
+- Critical evaluation of your overall approach
+- What aspects of the modeling attempts did you expect would substantially improve inference but did not achieve the desired outcome?
+- What limitations can you offer about your results or the process that led to your results?
