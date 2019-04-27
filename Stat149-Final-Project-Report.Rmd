@@ -36,6 +36,11 @@ ggplot(data, aes(LOS)) +
   theme_minimal()
 ```
 
+```{r pairplot, echo=FALSE, warning=FALSE, message=FALSE}
+library(GGally)
+ggpairs(data)
+```
+
 # Model
 - Main models considered
 - Decisions to consider alternative models
