@@ -36,6 +36,11 @@ ggplot(data, aes(LOS)) +
   theme_minimal()
 ```
 
+We can see that length of stay (LOS) spans from 0 to 38 days, with a median of 7 days.
+```{r summary}
+summary(data$LOS)
+```
+
 ```{r pairplot, echo=FALSE, warning=FALSE, message=FALSE}
 library(GGally)
 ggpairs(data)
@@ -43,6 +48,8 @@ ggpairs(data)
 
 # Model
 - Main models considered
+_ Gamma (right-skewed), inverse-Gaussian (right-skewed), negative binomial (# of trials), Poisson (discrete count)
+- Evaluate model based on Log-likelihood between types of model
 - Decisions to consider alternative models
 
 # Conclusion
