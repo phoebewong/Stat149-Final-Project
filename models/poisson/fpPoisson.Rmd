@@ -1,0 +1,388 @@
+---
+title: "Final Project Poisson Model"
+author: "Karina Huang, Nicholas Stern, Phoebe Wong"
+date: "4/24/2019"
+output: pdf_document
+---
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#load packages
+library(car)
+library(dplyr)
+library(utils)
+library(xtable)
+library(ggplot2)
+```
+
+# Exploratory Data Analysis
+
+In accordance with the desciption provided, the current dataset consist of 12,844 observations and 8 variable columns. The variable types are:
+
+  * Patient: integer, patient ID, numbered 1 to 12,844 (DISCRETE, EXCLUDE FROM MODEL)
+  * DIAGNOSIS: integer, 5-digit code indicating the part of heart that was affected (RECODE: CATEGORICAL)
+  * SEX: factor, F for female, M for male (CATEGORICAL)
+  * DRG: integer, code indicating the Diagnosis Related Group (RECODE: CATEGORICAL)
+  * DIED: integer, 1 for patients who died in the hospital, 0 otherwise (RECODE: CATEGORICAL)
+  * CHARGES: integer, total hospital charges in US dollars (CONTINUOUS)
+  * LOS: integer, hospital length of stay in days since admittance (RESPONSE: QUANTITATIVE, DISCRETE/CONTINUOUS)
+  * AGE: integer, age of the patient in years (RESPONSE: QUANTITATVE, DISCRETE/CONTINUOUS)
+  
+```{r}
+#load dataset
+ami <- read.csv('amidata.csv')
+#check dataset
+head(ami)
+```
+
+There are 699 missing values from the variable "charges," we used the `na.convert.mean` function from lecture notes to impute the missing values with the mean and contruct and extra column to test the contribution of the missing values to this variable.
+
+```{r}
+#check missing values
+colSums(is.na(ami))
+```
+
+```{r, echo = FALSE}
+na.convert.mean = function (frame) 
+{
+    vars <- names(frame)
+    if (!is.null(resp <- attr(attr(frame, "terms"), "response"))) {
+        vars <- vars[-resp]
+        x <- frame[[resp]]
+        pos <- is.na(x)
+        if (any(pos)) {
+            frame <- frame[!pos, , drop = FALSE]
+            warning(paste(sum(pos), "observations omitted due to missing values in the response"))
+        }
+    }
+    for (j in vars) {  #j is variable names
+        x <- frame[[j]]
+        pos <- is.na(x)
+        if (any(pos)) {
+            if (length(levels(x))) {   # factors
+                xx <- as.character(x)
+                xx[pos] <- "NA"
+                x <- factor(xx, exclude = NULL)
+            }
+            else if (is.matrix(x)) {   # matrices
+                ats <- attributes(x)
+                x.na <- 1*pos
+#               x[pos] <- 0
+                w <- !pos
+                n <- nrow(x)
+                TT <- array(1, c(1, n))
+                xbar <- (TT %*% x)/(TT %*% w)
+                xbar <- t(TT) %*% xbar
+                x[pos] <- xbar[pos]
+                attributes(x) <- ats
+                attributes(x.na) <- ats
+                dimnames(x.na)[[2]]=paste(dimnames(x)[[2]],".na",sep='')
+                frame[[paste(j,".na",sep='')]] <- x.na 
+            } else {   # ordinary numerical vector
+                ats <- attributes(x)
+                x[pos] <- mean(x[!pos])
+#               x[pos] <- 0
+                x.na <- 1*pos
+                frame[[paste(j,".na",sep='')]] <- x.na 
+                attributes(x) <- ats
+            }
+            frame[[j]] <- x
+        }
+    }
+    frame
+}
+```
+
+The summary statistics below indicate that our response variable, Length of Stay (LOS) has a minimum value of 0 and a maximum value of 38. Our first idea is to investigate the poisson model; we did not invetigate the zero-flated model because the current dataset only had 1 observation with a 0 length of stay. It makes sense to model LOS as a Poisson count process because we can treat individual patient as the "confined space," and count how many days (0 or larger) the patient stayed in the hospital since admittance. For each type of poisson model, we performed pair-wise analysis of variance for feature selection. 
+
+```{r, message = FALSE, warning=FALSE}
+#turn variable names to lowercase
+ami.names<-tolower(colnames(ami))
+colnames(ami)<-ami.names
+#impute missing values
+ami <- na.convert.mean(ami)
+#recode variables
+ami <- ami %>%
+  mutate(diagnosis = as.factor(diagnosis),
+         drg = as.factor(drg),
+         died = as.factor(died)) 
+#summary statistics
+summary(ami)
+```
+
+
+# Poisson Model
+
+```{r}
+#fit poisson models
+#null model
+p_null <- glm(los ~ 1, family = 'poisson', data = ami)
+predictors = vector() #cache vector for predictors
+i = 1 #count initiated for predictor storage
+for (col in colnames(ami)){
+  if (!(col %in% c('patient', 'los', 'charges.na'))){
+    predictors[[i]] = col #append column name to predictor vector
+    i = i+1 #update count
+  }
+}
+```
+
+```{r}
+#function for multivariable model compilation
+get_models <- function(var_combination, len, df, na = T, interaction = F){
+  models = vector(mode = 'list') #cache list for model storage
+  for (comb in var_combination){
+    #if charge is in the combination, add missing value indicator
+    if ('charges' %in% comb & na == T){
+      v_name = paste(comb, collapse = '_') #variable name for model storage
+      v_name2 = ifelse(interaction == F, paste(comb, collapse = '+'), paste(comb, collapse = ':'))
+      # v_name2 = paste(comb, collapse = '+') #variabel name for model compilation
+      m_name = paste(c("p", v_name, 'charges.na'), collapse = '_') #get model name
+      m =  paste(c('los', paste(c(v_name2, 'charges.na'), collapse = '+')), collapse = '~') #compile model
+      models[[m_name]] <- glm(m, family = 'poisson', data = df)
+      }
+    else{
+      v_name = paste(comb, collapse = '_')
+      v_name2 = ifelse(interaction == F, paste(comb, collapse = '+'), paste(comb, collapse = ':'))
+      m_name = paste(c("p", v_name), collapse = '_')
+      m =  paste(c('los', v_name2), collapse = '~')
+      models[[m_name]] <- glm(m, family = 'poisson', data = df)
+      }
+    }
+  return(models) #return list of models
+}
+```
+
+```{r}
+#get combinations of all models, without interaction terms
+for (i in 1:6){
+  l_name = paste('m',toString(i), sep = '') #get list names
+  c = combn(predictors, i, simplify = F) #get combination of variables
+  assign(l_name, get_models(c, length(c), ami)) #get models
+}
+```
+
+The analysis of deviance between the null model and all models with one predictor indicates that the drop in deviance from the null model is significant for all predictors. Therefore, we start with the predictor "charge+charge.na," as the drop in deviance from null is the biggest for this predicrtor, and examine the drop in residual deviance when additional predictors are introduced to the model.
+
+```{r}
+#analysis of deviance
+#null vs. 1-predictor model
+
+anova(p_null, m1[[1]], m1[[2]], m1[[3]], m1[[4]], m1[[5]], m1[[6]], test = 'Chi')
+```
+
+```{r}
+#check items in 2-predictor model list
+names(m2)
+```
+
+```{r}
+#analysis of deviance
+#1-predictor model vs. 2-predictor model
+
+anova(m1[[5]], m2[[4]],  m2[[8]],  m2[[11]],  m2[[13]],  m2[[15]],test = 'Chi')
+```
+
+```{r}
+#check items in 3-predictor model list
+names(m3)
+```
+
+```{r}
+#analysis of deviance
+#2-predictor model vs. 3-predictor model
+
+anova(m2[[11]], m3[[6]],  m3[[12]],  m3[[17]],  m3[[19]],test = 'Chi')
+```
+
+```{r}
+names(m4)
+```
+
+
+```{r}
+#analysis of deviance
+#3-predictor model vs. 4-predictor model
+
+anova(m3[[19]], m4[[9]],  m4[[13]],  m4[[15]],test = 'Chi')
+```
+
+```{r}
+names(m5)
+```
+
+
+```{r}
+#analysis of deviance
+#4-predictor model vs. 5-predictor model
+
+anova(m4[[9]], m5[[3]],  m5[[5]], test = 'Chi')
+```
+
+```{r}
+#analysis of deviance
+#5-predictor model vs. 6-predictor model
+
+anova(m5[[3]], m6[[1]], test = 'Chi')
+```
+
+The pair-wise feature selection from analysis of deviance above suggest that we do not include died as a predictor of the length of stay. Perhaps that there is not an apparent pattern in whether death would indicate short length of stay. Before we move on to examine possible interaction terms, we examine the model selected from the above process.
+
+```{r}
+summary(m5[[3]])
+```
+
+The model summary above suggest a potential lack of fit. The dispersion parameter by the model is approximately $\frac{19630}{12829} \approx 1.53$. The residual vs. fitted plot below shows that there's a pattern in variance of the residual values as the fitted values increased, and that there are residual values outside the range of [-2, 2]
+
+```{r}
+par(mfrow=c(1,2))
+#rvf
+plot(residuals(m5[[3]])~fitted(m5[[3]]),
+     xlab="Fitted Values",
+     ylab="Residual Values", 
+     main="Residual vs. Fitted Values Plot")
+abline(h = -2, lty = 2, col = 'red')
+abline(h = 2, lty = 2, col = 'red')
+
+#plot cook's distance
+plot(cooks.distance(m5[[3]]), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's Distances Plot")
+abline(h=1,lty=2,col="red")
+```
+
+---
+
+# Collinearity Check
+
+```{r}
+#check whether variables could be collinear
+vif(m5[[3]])
+```
+
+---
+
+
+This section below investigate model fitting without missing value imputation. We removed the missing observations with missing values and repeated the Poisson model selection and fitting from above. 699 observations were removed due to missing value in the variable 'charges'.
+
+```{r}
+#load dataset
+ami_rna <- na.omit(read.csv('amidata.csv'))
+#turn variable names to lowercase
+ami_rna.names<-tolower(colnames(ami_rna))
+colnames(ami_rna)<-ami_rna.names
+#recode variables
+ami_rna <- ami_rna %>%
+  mutate(diagnosis = as.factor(diagnosis),
+         drg = as.factor(drg),
+         died = as.factor(died))
+#check dataset
+summary(ami_rna)
+```
+
+```{r}
+#get combinations of all models, without interaction terms
+for (i in 1:6){
+  l_name = paste('rna_m',toString(i), sep = '') #get list names
+  c = combn(predictors, i, simplify = F) #get combination of variables
+  assign(l_name, get_models(c, length(c), ami_rna, na = F)) #get models
+}
+```
+
+```{r}
+#analysis of deviance
+#null vs. 1-predictor model
+
+p_null_rna <- glm(los ~ 1, family = 'poisson', data = ami_rna)
+anova(p_null_rna, rna_m1[[1]], rna_m1[[2]], rna_m1[[3]], rna_m1[[4]], rna_m1[[5]], rna_m1[[6]], test = 'Chi')
+```
+
+```{r}
+#analysis of deviance
+#1-predictor model vs. 2-predictor model
+
+anova(rna_m1[[5]], rna_m2[[4]],  rna_m2[[8]],  rna_m2[[11]],  rna_m2[[13]],  rna_m2[[15]],test = 'Chi')
+```
+
+```{r}
+#analysis of deviance
+#2-predictor model vs. 3-predictor model
+
+anova(rna_m2[[11]], rna_m3[[6]],  rna_m3[[12]],  rna_m3[[17]],  rna_m3[[19]],test = 'Chi')
+```
+
+```{r}
+#analysis of deviance
+#3-predictor model vs. 4-predictor model
+
+anova(rna_m3[[19]], rna_m4[[9]],  rna_m4[[13]],  rna_m4[[15]],test = 'Chi')
+```
+
+```{r}
+#analysis of deviance
+#4-predictor model vs. 5-predictor model
+
+anova(rna_m4[[9]], rna_m5[[3]],  rna_m5[[5]], test = 'Chi')
+```
+
+```{r}
+#analysis of deviance
+#5-predictor model vs. 6-predictor model
+
+anova(rna_m5[[3]], rna_m6[[1]], test = 'Chi')
+```
+
+We ended up with the same set of predictors according to the selection process above.
+
+```{r}
+summary(rna_m5[[3]])
+```
+
+```{r}
+par(mfrow=c(1,2))
+#rvf
+plot(residuals(rna_m5[[3]])~fitted(rna_m5[[3]]),
+     xlab="Fitted Values",
+     ylab="Residual Values",
+     main="Residual vs. Fitted Values Plot")
+abline(h = -2, lty = 2, col = 'red')
+abline(h = 2, lty = 2, col = 'red')
+
+#plot cook's distance
+plot(cooks.distance(rna_m5[[3]]), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's Distances Plot")
+abline(h=1,lty=2,col="red")
+```
+
+---
+
+# Adding Interaction Terms
+
+In this section we examine the effect of interaction terms. 
+
+```{r}
+interactions <- vector(mode = "list") #cache list for interaction terms
+i = 1 #initiate count for variable storage
+var_quant <- c("charges", "age")
+var_qual <- c("diagnosis", "sex", "drg", "died")
+for (v1 in var_quant){
+  for (v2 in var_qual){
+    interactions[[i]] = c(v1, v2)
+    i = i+1
+  }
+}
+```
+
+
+```{r}
+#get 2-way-interaction models 
+interact_m2 <- get_models(interactions, length(interactions), ami, na = T, interaction = T)
+```
+
+```{r}
+names(interact_m2)
+```
+
+
