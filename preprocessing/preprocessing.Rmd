@@ -1,0 +1,67 @@
+---
+title: "Pre-processing"
+author: "Nick Stern"
+date: "4/28/2019"
+output: 
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    fig_width: 6
+    fig_height: 4
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This markdown files cleans the Acute Myocardial Infarction (AMI) dataset, taken from the Canvas course page. The step by step pre-processing actions are outlined below.
+
+First we read in the dataset
+
+```{r message=FALSE, warning=FALSE}
+## Reading in the original data
+library(dplyr)
+ami = read.csv('data/amidata.csv')
+head(ami)
+```
+
+Then we made the variable names lowercase for ease of use and to adhere to convention.
+
+```{r}
+# make variable names lowercase
+ami.names<-tolower(colnames(ami))
+colnames(ami)<-ami.names
+```
+
+Then we imputed the missing values in the ```charges``` column with the ```na.convert.mean``` function from lecture notes. This function imputes missing values with the mean of the predictor, and creates a new binary predictor that is essentially an indicator variable for which values were originally missing. 
+
+```{r}
+source('na-convert.R')  # NA conversion function from class
+# impute missing values
+ami <- na.convert.mean(ami)
+```
+
+Finally, we factorized some of the categorical variables that weren't factorized by default.
+
+```{r}
+#recode variables
+ami <- ami %>%
+  mutate(diagnosis = factor(diagnosis),
+         drg = factor(drg),
+         died = factor(died))
+```
+
+Below we provide a summary of the pre-processed dataset, and save it to the local filesystem.
+
+```{r}
+#summary statistics
+summary(ami)
+saveRDS(ami, file='data/amidata_clean.rds')
+```
+
+
+
+
