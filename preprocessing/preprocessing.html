@@ -1531,7 +1531,7 @@ div.tocify {
 </div>
 
 
-<p>This markdown files cleans the Acute Myocardial Infraction (AMI) dataset, taken from the Canvas course page. The step by step pre-processing actions are outlined below.</p>
+<p>This markdown files cleans the Acute Myocardial Infarction (AMI) dataset, taken from the Canvas course page. The step by step pre-processing actions are outlined below.</p>
 <p>First we read in the dataset</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" title="1"><span class="co">## Reading in the original data</span></a>
 <a class="sourceLine" id="cb1-2" title="2"><span class="kw">library</span>(dplyr)</a>
@@ -1555,9 +1555,9 @@ div.tocify {
 <p>Finally, we factorized some of the categorical variables that weren’t factorized by default.</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" title="1"><span class="co">#recode variables</span></a>
 <a class="sourceLine" id="cb5-2" title="2">ami &lt;-<span class="st"> </span>ami <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb5-3" title="3"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">diagnosis =</span> <span class="kw">as.factor</span>(diagnosis),</a>
-<a class="sourceLine" id="cb5-4" title="4">         <span class="dt">drg =</span> <span class="kw">as.factor</span>(drg),</a>
-<a class="sourceLine" id="cb5-5" title="5">         <span class="dt">died =</span> <span class="kw">as.factor</span>(died))</a></code></pre></div>
+<a class="sourceLine" id="cb5-3" title="3"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">diagnosis =</span> <span class="kw">factor</span>(diagnosis),</a>
+<a class="sourceLine" id="cb5-4" title="4">         <span class="dt">drg =</span> <span class="kw">factor</span>(drg),</a>
+<a class="sourceLine" id="cb5-5" title="5">         <span class="dt">died =</span> <span class="kw">factor</span>(died))</a></code></pre></div>
 <p>Below we provide a summary of the pre-processed dataset, and save it to the local filesystem.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" title="1"><span class="co">#summary statistics</span></a>
 <a class="sourceLine" id="cb6-2" title="2"><span class="kw">summary</span>(ami)</a></code></pre></div>
@@ -1577,7 +1577,7 @@ div.tocify {
 ##  3rd Qu.:12254   3rd Qu.:10.000   3rd Qu.: 77.00   3rd Qu.:0.00000  
 ##  Max.   :47910   Max.   :38.000   Max.   :103.00   Max.   :1.00000  
 ## </code></pre>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" title="1"><span class="kw">write.csv</span>(<span class="dt">file=</span><span class="st">&#39;data/amidata_cleaned.csv&#39;</span>, <span class="dt">x=</span>ami)</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" title="1"><span class="kw">saveRDS</span>(ami, <span class="dt">file=</span><span class="st">&#39;test.rds&#39;</span>)</a></code></pre></div>
 
 
 

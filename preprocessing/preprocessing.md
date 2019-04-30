@@ -15,7 +15,7 @@ output:
 
 
 
-This markdown files cleans the Acute Myocardial Infraction (AMI) dataset, taken from the Canvas course page. The step by step pre-processing actions are outlined below.
+This markdown files cleans the Acute Myocardial Infarction (AMI) dataset, taken from the Canvas course page. The step by step pre-processing actions are outlined below.
 
 First we read in the dataset
 
@@ -61,9 +61,9 @@ Finally, we factorized some of the categorical variables that weren't factorized
 ```r
 #recode variables
 ami <- ami %>%
-  mutate(diagnosis = as.factor(diagnosis),
-         drg = as.factor(drg),
-         died = as.factor(died))
+  mutate(diagnosis = factor(diagnosis),
+         drg = factor(drg),
+         died = factor(died))
 ```
 
 Below we provide a summary of the pre-processed dataset, and save it to the local filesystem.
@@ -94,7 +94,7 @@ summary(ami)
 ```
 
 ```r
-write.csv(file='data/amidata_cleaned.csv', x=ami)
+saveRDS(ami, file='test.rds')
 ```
 
 
