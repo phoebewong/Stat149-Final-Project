@@ -29,7 +29,7 @@ Before we can fit the Gamma GLM, we need to deal with the one observation that h
 
 
 ```{r}
-ami = readRDS("data/amidata_clean.rds")
+ami = readRDS("../../data/amidata_clean.rds")
 ami[ami$los == 0, ]
 table(ami$los)[1:15]
 ```
@@ -77,29 +77,28 @@ ami$los[ami$los == 0] = 1
 
 ### Feature Selection
 
-We chose our best fit model using stepwise feature selection. The stepwise regression uses an iterative forward/backward selection method and the AIC criterion to choose the best model. To get a baseline, we first ran stepwise feature selection without interaction terms.
+We chose our best fit model using stepwise feature selection. The stepwise regression uses an iterative forward/backward selection method and the AIC criterion to choose the best model. To get a baseline, we first ran stepwise feature selection without interaction terms. Note, we removed patient id since there should be no causal connection between the patient id and the length of stay if the data were appropriately randomized.
 
 ```{r}
 # Without interaction terms
-step(glm(los ~ ., family=Gamma(log), data=ami), trace=0, direction='both')
+step(glm(los ~ .-patient, family=Gamma(log), data=ami), trace=0, direction='both')
 ```
 
 The results indicate that the ```died``` feature did not improve the model fit to where it was warranted including it as an extra predictor. Next, we ran stepwise feature selection with all the interaction terms considered (of which there are many due to the multi-level factors in our dataset), to compare with our baseline.  
 
 ```{r}
 # With interaction terms
-step(glm(los ~ .^2, family=Gamma(log), data=ami), trace=0, direction='both')
+step(glm(los ~ (.-patient)^2, family=Gamma(log), data=ami), trace=0, direction='both')
 ```
 
-As we can see from the step function output, the addition of a handful of interaction terms between ```patient```, ```diagnosis```, ```age```, ```charges```, ```drg```, and ```charges.na```. Next, we ran the model with these specified interaction to obtain the following fit.
+As we can see from the step function output, the addition of a handful of interaction terms between ```diagnosis```, ```age```, ```charges```, ```drg```, and ```charges.na```. Next, we ran the model with these specified interaction to obtain the following fit.
 
 
 ```{r}
-gamma_model = glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
-    age + charges.na + patient:diagnosis + patient:sex + patient:drg + 
-    patient:charges + patient:charges.na + diagnosis:drg + diagnosis:charges + 
-    sex:age + sex:charges.na + drg:charges + drg:age + drg:charges.na + 
-    charges:age, family = Gamma(log), data = ami)
+gamma_model = glm(formula = los ~ diagnosis + sex + drg + charges + age + charges.na + 
+    diagnosis:drg + diagnosis:charges + sex:age + sex:charges.na + 
+    drg:charges + drg:age + drg:charges.na + charges:age, family = Gamma(log), 
+    data = ami)
 summary(gamma_model)
 ```
 
@@ -136,7 +135,7 @@ There are a number of terms with a GVIF^(1/(2*Df)) greater than $\sqrt{10}$, tho
 
 
 ```{r}
-baseline_model = glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
+baseline_model = glm(formula = los ~ diagnosis + sex + drg + charges + 
     age + charges.na, family = Gamma(log), data = ami)
 vif(baseline_model)
 ```

@@ -28,7 +28,7 @@ Before we can fit the Gamma GLM, we need to deal with the one observation that h
 
 
 ```r
-ami = readRDS("data/amidata_clean.rds")
+ami = readRDS("../../data/amidata_clean.rds")
 ami[ami$los == 0, ]
 ```
 
@@ -97,32 +97,32 @@ ami$los[ami$los == 0] = 1
 
 ### Feature Selection
 
-We chose our best fit model using stepwise feature selection. The stepwise regression uses an iterative forward/backward selection method and the AIC criterion to choose the best model. To get a baseline, we first ran stepwise feature selection without interaction terms.
+We chose our best fit model using stepwise feature selection. The stepwise regression uses an iterative forward/backward selection method and the AIC criterion to choose the best model. To get a baseline, we first ran stepwise feature selection without interaction terms. Note, we removed patient id since there should be no causal connection between the patient id and the length of stay if the data were appropriately randomized.
 
 
 ```r
 # Without interaction terms
-step(glm(los ~ ., family=Gamma(log), data=ami), trace=0, direction='both')
+step(glm(los ~ .-patient, family=Gamma(log), data=ami), trace=0, direction='both')
 ```
 
 ```
 ## 
-## Call:  glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
-##     age + charges.na, family = Gamma(log), data = ami)
+## Call:  glm(formula = los ~ diagnosis + sex + drg + charges + age + charges.na, 
+##     family = Gamma(log), data = ami)
 ## 
 ## Coefficients:
-##    (Intercept)         patient  diagnosis41011  diagnosis41021  
-##      8.815e-01      -2.781e-05      -7.186e-03      -3.223e-02  
-## diagnosis41031  diagnosis41041  diagnosis41051  diagnosis41071  
-##     -8.141e-02      -1.568e-02       9.056e-02       5.301e-03  
-## diagnosis41081  diagnosis41091            sexM          drg122  
-##     -7.347e-03       3.639e-02      -3.902e-02      -3.845e-02  
-##         drg123         charges             age      charges.na  
-##     -7.290e-01       7.486e-05       8.397e-03       1.644e-01  
+##    (Intercept)  diagnosis41011  diagnosis41021  diagnosis41031  
+##      7.370e-01       1.401e-02      -9.595e-03      -6.233e-02  
+## diagnosis41041  diagnosis41051  diagnosis41071  diagnosis41081  
+##      8.137e-03       1.112e-01       1.055e-02      -5.108e-02  
+## diagnosis41091            sexM          drg122          drg123  
+##      6.081e-02      -4.212e-02      -4.695e-02      -7.308e-01  
+##        charges             age      charges.na  
+##      7.055e-05       8.424e-03       1.497e-01  
 ## 
-## Degrees of Freedom: 12843 Total (i.e. Null);  12828 Residual
+## Degrees of Freedom: 12843 Total (i.e. Null);  12829 Residual
 ## Null Deviance:	    6558 
-## Residual Deviance: 3271 	AIC: 64890
+## Residual Deviance: 3401 	AIC: 65410
 ```
 
 The results indicate that the ```died``` feature did not improve the model fit to where it was warranted including it as an extra predictor. Next, we ran stepwise feature selection with all the interaction terms considered (of which there are many due to the multi-level factors in our dataset), to compare with our baseline.  
@@ -130,166 +130,139 @@ The results indicate that the ```died``` feature did not improve the model fit t
 
 ```r
 # With interaction terms
-step(glm(los ~ .^2, family=Gamma(log), data=ami), trace=0, direction='both')
+step(glm(los ~ (.-patient)^2, family=Gamma(log), data=ami), trace=0, direction='both')
 ```
 
 ```
 ## 
-## Call:  glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
-##     age + charges.na + patient:diagnosis + patient:sex + patient:drg + 
-##     patient:charges + patient:charges.na + diagnosis:drg + diagnosis:charges + 
-##     sex:age + sex:charges.na + drg:charges + drg:age + drg:charges.na + 
-##     charges:age, family = Gamma(log), data = ami)
+## Call:  glm(formula = los ~ diagnosis + sex + drg + charges + age + charges.na + 
+##     diagnosis:drg + diagnosis:charges + sex:age + sex:charges.na + 
+##     drg:charges + drg:age + drg:charges.na + charges:age, family = Gamma(log), 
+##     data = ami)
 ## 
 ## Coefficients:
-##            (Intercept)                 patient          diagnosis41011  
-##              5.689e-01              -1.160e-05               1.941e-01  
-##         diagnosis41021          diagnosis41031          diagnosis41041  
-##              1.966e-01              -1.642e-01               3.261e-02  
-##         diagnosis41051          diagnosis41071          diagnosis41081  
-##              1.066e-01               1.212e-01              -1.781e-01  
-##         diagnosis41091                    sexM                  drg122  
-##              1.025e-01               1.377e-01              -1.273e-01  
-##                 drg123                 charges                     age  
-##             -9.040e-01               8.282e-05               1.306e-02  
-##             charges.na  patient:diagnosis41011  patient:diagnosis41021  
-##              8.901e-02              -4.933e-06              -1.536e-05  
-## patient:diagnosis41031  patient:diagnosis41041  patient:diagnosis41051  
-##              1.341e-06              -7.988e-06              -2.346e-05  
-## patient:diagnosis41071  patient:diagnosis41081  patient:diagnosis41091  
-##             -1.563e-05               1.491e-05              -7.914e-06  
-##           patient:sexM          patient:drg122          patient:drg123  
-##              4.447e-06              -6.550e-07              -1.309e-05  
-##        patient:charges      patient:charges.na   diagnosis41011:drg122  
-##             -1.063e-09               2.707e-05              -6.366e-02  
-##  diagnosis41021:drg122   diagnosis41031:drg122   diagnosis41041:drg122  
-##              2.456e-02               9.699e-02               4.488e-02  
-##  diagnosis41051:drg122   diagnosis41071:drg122   diagnosis41081:drg122  
-##              9.654e-02              -9.068e-03              -3.013e-02  
-##  diagnosis41091:drg122   diagnosis41011:drg123   diagnosis41021:drg123  
-##              3.017e-02              -5.678e-02              -3.118e-01  
-##  diagnosis41031:drg123   diagnosis41041:drg123   diagnosis41051:drg123  
-##             -8.174e-02               7.444e-02               3.150e-01  
-##  diagnosis41071:drg123   diagnosis41081:drg123   diagnosis41091:drg123  
-##              3.592e-02               1.240e-01               1.820e-02  
-## diagnosis41011:charges  diagnosis41021:charges  diagnosis41031:charges  
-##             -1.134e-05              -9.897e-06               3.827e-06  
-## diagnosis41041:charges  diagnosis41051:charges  diagnosis41071:charges  
-##             -1.202e-06               5.110e-06               1.961e-07  
-## diagnosis41081:charges  diagnosis41091:charges                sexM:age  
-##              4.002e-06              -1.871e-06              -2.989e-03  
-##        sexM:charges.na          drg122:charges          drg123:charges  
-##             -9.337e-02               2.007e-05               4.437e-05  
-##             drg122:age              drg123:age       drg122:charges.na  
-##             -1.826e-03              -2.588e-03              -1.674e-01  
-##      drg123:charges.na             charges:age  
-##             -5.817e-02              -1.659e-07  
+##            (Intercept)          diagnosis41011          diagnosis41021  
+##              5.424e-01               1.558e-01               8.425e-02  
+##         diagnosis41031          diagnosis41041          diagnosis41051  
+##             -1.659e-01              -7.330e-03               2.266e-03  
+##         diagnosis41071          diagnosis41081          diagnosis41091  
+##              3.286e-02              -1.103e-01               5.479e-02  
+##                   sexM                  drg122                  drg123  
+##              1.409e-01              -1.400e-01              -9.775e-01  
+##                charges                     age              charges.na  
+##              7.282e-05               1.321e-02               2.561e-01  
+##  diagnosis41011:drg122   diagnosis41021:drg122   diagnosis41031:drg122  
+##             -6.278e-02               2.673e-02               9.561e-02  
+##  diagnosis41041:drg122   diagnosis41051:drg122   diagnosis41071:drg122  
+##              4.197e-02               8.813e-02              -1.244e-02  
+##  diagnosis41081:drg122   diagnosis41091:drg122   diagnosis41011:drg123  
+##             -2.727e-02               3.663e-02              -2.220e-02  
+##  diagnosis41021:drg123   diagnosis41031:drg123   diagnosis41041:drg123  
+##             -2.581e-01              -1.000e-01               1.217e-01  
+##  diagnosis41051:drg123   diagnosis41071:drg123   diagnosis41081:drg123  
+##              3.649e-01               7.414e-02               1.294e-01  
+##  diagnosis41091:drg123  diagnosis41011:charges  diagnosis41021:charges  
+##              5.626e-02              -9.888e-06              -7.906e-06  
+## diagnosis41031:charges  diagnosis41041:charges  diagnosis41051:charges  
+##              5.815e-06              -1.090e-06               1.162e-06  
+## diagnosis41071:charges  diagnosis41081:charges  diagnosis41091:charges  
+##             -2.235e-06               6.341e-06              -1.286e-06  
+##               sexM:age         sexM:charges.na          drg122:charges  
+##             -2.660e-03              -9.147e-02               1.884e-05  
+##         drg123:charges              drg122:age              drg123:age  
+##              4.665e-05              -1.712e-03              -3.473e-03  
+##      drg122:charges.na       drg123:charges.na             charges:age  
+##             -1.566e-01              -6.514e-02              -2.009e-07  
 ## 
-## Degrees of Freedom: 12843 Total (i.e. Null);  12782 Residual
+## Degrees of Freedom: 12843 Total (i.e. Null);  12796 Residual
 ## Null Deviance:	    6558 
-## Residual Deviance: 3127 	AIC: 64390
+## Residual Deviance: 3270 	AIC: 64960
 ```
 
-As we can see from the step function output, the addition of a handful of interaction terms between ```patient```, ```diagnosis```, ```age```, ```charges```, ```drg```, and ```charges.na```. Next, we ran the model with these specified interaction to obtain the following fit.
+As we can see from the step function output, the addition of a handful of interaction terms between ```diagnosis```, ```age```, ```charges```, ```drg```, and ```charges.na```. Next, we ran the model with these specified interaction to obtain the following fit.
 
 
 
 ```r
-gamma_model = glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
-    age + charges.na + patient:diagnosis + patient:sex + patient:drg + 
-    patient:charges + patient:charges.na + diagnosis:drg + diagnosis:charges + 
-    sex:age + sex:charges.na + drg:charges + drg:age + drg:charges.na + 
-    charges:age, family = Gamma(log), data = ami)
+gamma_model = glm(formula = los ~ diagnosis + sex + drg + charges + age + charges.na + 
+    diagnosis:drg + diagnosis:charges + sex:age + sex:charges.na + 
+    drg:charges + drg:age + drg:charges.na + charges:age, family = Gamma(log), 
+    data = ami)
 summary(gamma_model)
 ```
 
 ```
 ## 
 ## Call:
-## glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
-##     age + charges.na + patient:diagnosis + patient:sex + patient:drg + 
-##     patient:charges + patient:charges.na + diagnosis:drg + diagnosis:charges + 
-##     sex:age + sex:charges.na + drg:charges + drg:age + drg:charges.na + 
-##     charges:age, family = Gamma(log), data = ami)
+## glm(formula = los ~ diagnosis + sex + drg + charges + age + charges.na + 
+##     diagnosis:drg + diagnosis:charges + sex:age + sex:charges.na + 
+##     drg:charges + drg:age + drg:charges.na + charges:age, family = Gamma(log), 
+##     data = ami)
 ## 
 ## Deviance Residuals: 
 ##     Min       1Q   Median       3Q      Max  
-## -2.5276  -0.3568  -0.0283   0.2387   4.5603  
+## -2.5222  -0.3711  -0.0316   0.2310   4.8991  
 ## 
 ## Coefficients:
 ##                          Estimate Std. Error t value Pr(>|t|)    
-## (Intercept)             5.689e-01  9.503e-02   5.986 2.20e-09 ***
-## patient                -1.160e-05  7.028e-06  -1.651  0.09872 .  
-## diagnosis41011          1.941e-01  7.351e-02   2.641  0.00828 ** 
-## diagnosis41021          1.966e-01  1.156e-01   1.701  0.08898 .  
-## diagnosis41031         -1.642e-01  1.113e-01  -1.476  0.14004    
-## diagnosis41041          3.261e-02  7.155e-02   0.456  0.64861    
-## diagnosis41051          1.066e-01  1.329e-01   0.803  0.42225    
-## diagnosis41071          1.212e-01  7.434e-02   1.630  0.10308    
-## diagnosis41081         -1.781e-01  1.259e-01  -1.415  0.15712    
-## diagnosis41091          1.025e-01  6.873e-02   1.492  0.13573    
-## sexM                    1.377e-01  5.111e-02   2.694  0.00707 ** 
-## drg122                 -1.273e-01  7.382e-02  -1.724  0.08464 .  
-## drg123                 -9.040e-01  1.157e-01  -7.816 5.88e-15 ***
-## charges                 8.282e-05  5.287e-06  15.664  < 2e-16 ***
-## age                     1.306e-02  9.277e-04  14.082  < 2e-16 ***
-## charges.na              8.901e-02  5.104e-02   1.744  0.08121 .  
-## patient:diagnosis41011 -4.933e-06  7.041e-06  -0.701  0.48358    
-## patient:diagnosis41021 -1.536e-05  1.110e-05  -1.383  0.16659    
-## patient:diagnosis41031  1.341e-06  1.062e-05   0.126  0.89949    
-## patient:diagnosis41041 -7.988e-06  6.800e-06  -1.175  0.24013    
-## patient:diagnosis41051 -2.346e-05  1.309e-05  -1.792  0.07323 .  
-## patient:diagnosis41071 -1.563e-05  7.220e-06  -2.165  0.03044 *  
-## patient:diagnosis41081  1.491e-05  1.203e-05   1.239  0.21542    
-## patient:diagnosis41091 -7.914e-06  6.518e-06  -1.214  0.22472    
-## patient:sexM            4.447e-06  2.430e-06   1.830  0.06721 .  
-## patient:drg122         -6.550e-07  2.657e-06  -0.247  0.80527    
-## patient:drg123         -1.309e-05  4.105e-06  -3.190  0.00143 ** 
-## patient:charges        -1.063e-09  2.076e-10  -5.123 3.05e-07 ***
-## patient:charges.na      2.707e-05  5.321e-06   5.087 3.70e-07 ***
-## diagnosis41011:drg122  -6.366e-02  5.763e-02  -1.105  0.26937    
-## diagnosis41021:drg122   2.456e-02  8.640e-02   0.284  0.77625    
-## diagnosis41031:drg122   9.699e-02  8.319e-02   1.166  0.24368    
-## diagnosis41041:drg122   4.488e-02  5.566e-02   0.806  0.42002    
-## diagnosis41051:drg122   9.654e-02  1.021e-01   0.945  0.34463    
-## diagnosis41071:drg122  -9.068e-03  5.775e-02  -0.157  0.87524    
-## diagnosis41081:drg122  -3.013e-02  8.398e-02  -0.359  0.71974    
-## diagnosis41091:drg122   3.017e-02  5.385e-02   0.560  0.57530    
-## diagnosis41011:drg123  -5.678e-02  7.438e-02  -0.763  0.44529    
-## diagnosis41021:drg123  -3.118e-01  1.209e-01  -2.579  0.00992 ** 
-## diagnosis41031:drg123  -8.174e-02  1.260e-01  -0.649  0.51662    
-## diagnosis41041:drg123   7.444e-02  7.521e-02   0.990  0.32225    
-## diagnosis41051:drg123   3.150e-01  1.350e-01   2.334  0.01959 *  
-## diagnosis41071:drg123   3.592e-02  8.511e-02   0.422  0.67301    
-## diagnosis41081:drg123   1.240e-01  1.094e-01   1.133  0.25715    
-## diagnosis41091:drg123   1.820e-02  6.893e-02   0.264  0.79177    
-## diagnosis41011:charges -1.134e-05  3.796e-06  -2.987  0.00282 ** 
-## diagnosis41021:charges -9.897e-06  5.768e-06  -1.716  0.08621 .  
-## diagnosis41031:charges  3.827e-06  6.433e-06   0.595  0.55197    
-## diagnosis41041:charges -1.202e-06  3.781e-06  -0.318  0.75053    
-## diagnosis41051:charges  5.110e-06  8.850e-06   0.577  0.56365    
-## diagnosis41071:charges  1.961e-07  3.889e-06   0.050  0.95978    
-## diagnosis41081:charges  4.002e-06  5.659e-06   0.707  0.47951    
-## diagnosis41091:charges -1.871e-06  3.586e-06  -0.522  0.60172    
-## sexM:age               -2.989e-03  7.024e-04  -4.255 2.10e-05 ***
-## sexM:charges.na        -9.337e-02  3.957e-02  -2.360  0.01831 *  
-## drg122:charges          2.007e-05  1.684e-06  11.923  < 2e-16 ***
-## drg123:charges          4.437e-05  2.015e-06  22.013  < 2e-16 ***
-## drg122:age             -1.826e-03  7.310e-04  -2.498  0.01249 *  
-## drg123:age             -2.588e-03  1.285e-03  -2.014  0.04403 *  
-## drg122:charges.na      -1.674e-01  4.110e-02  -4.072 4.68e-05 ***
-## drg123:charges.na      -5.817e-02  6.560e-02  -0.887  0.37523    
-## charges:age            -1.659e-07  5.548e-08  -2.989  0.00280 ** 
+## (Intercept)             5.424e-01  8.864e-02   6.119 9.70e-10 ***
+## diagnosis41011          1.558e-01  6.412e-02   2.429 0.015146 *  
+## diagnosis41021          8.425e-02  9.871e-02   0.853 0.393410    
+## diagnosis41031         -1.659e-01  1.008e-01  -1.645 0.099972 .  
+## diagnosis41041         -7.330e-03  6.273e-02  -0.117 0.906974    
+## diagnosis41051          2.266e-03  1.216e-01   0.019 0.985128    
+## diagnosis41071          3.286e-02  6.431e-02   0.511 0.609448    
+## diagnosis41081         -1.103e-01  9.455e-02  -1.166 0.243438    
+## diagnosis41091          5.479e-02  5.982e-02   0.916 0.359795    
+## sexM                    1.409e-01  5.083e-02   2.773 0.005567 ** 
+## drg122                 -1.400e-01  7.515e-02  -1.863 0.062528 .  
+## drg123                 -9.775e-01  1.184e-01  -8.257  < 2e-16 ***
+## charges                 7.282e-05  5.186e-06  14.040  < 2e-16 ***
+## age                     1.321e-02  9.649e-04  13.690  < 2e-16 ***
+## charges.na              2.561e-01  3.727e-02   6.871 6.69e-12 ***
+## diagnosis41011:drg122  -6.278e-02  5.988e-02  -1.048 0.294486    
+## diagnosis41021:drg122   2.673e-02  8.988e-02   0.297 0.766184    
+## diagnosis41031:drg122   9.561e-02  8.640e-02   1.107 0.268480    
+## diagnosis41041:drg122   4.197e-02  5.781e-02   0.726 0.467870    
+## diagnosis41051:drg122   8.813e-02  1.062e-01   0.830 0.406539    
+## diagnosis41071:drg122  -1.244e-02  6.002e-02  -0.207 0.835836    
+## diagnosis41081:drg122  -2.727e-02  8.718e-02  -0.313 0.754482    
+## diagnosis41091:drg122   3.663e-02  5.594e-02   0.655 0.512524    
+## diagnosis41011:drg123  -2.220e-02  7.734e-02  -0.287 0.774043    
+## diagnosis41021:drg123  -2.581e-01  1.257e-01  -2.054 0.040021 *  
+## diagnosis41031:drg123  -1.000e-01  1.305e-01  -0.767 0.443347    
+## diagnosis41041:drg123   1.217e-01  7.811e-02   1.559 0.119125    
+## diagnosis41051:drg123   3.649e-01  1.399e-01   2.608 0.009122 ** 
+## diagnosis41071:drg123   7.414e-02  8.855e-02   0.837 0.402475    
+## diagnosis41081:drg123   1.294e-01  1.137e-01   1.139 0.254883    
+## diagnosis41091:drg123   5.626e-02  7.168e-02   0.785 0.432542    
+## diagnosis41011:charges -9.888e-06  3.867e-06  -2.557 0.010569 *  
+## diagnosis41021:charges -7.906e-06  5.937e-06  -1.331 0.183055    
+## diagnosis41031:charges  5.815e-06  6.563e-06   0.886 0.375634    
+## diagnosis41041:charges -1.090e-06  3.847e-06  -0.283 0.776937    
+## diagnosis41051:charges  1.162e-06  8.924e-06   0.130 0.896406    
+## diagnosis41071:charges -2.235e-06  3.952e-06  -0.566 0.571636    
+## diagnosis41081:charges  6.341e-06  5.821e-06   1.089 0.276059    
+## diagnosis41091:charges -1.286e-06  3.652e-06  -0.352 0.724654    
+## sexM:age               -2.660e-03  7.304e-04  -3.642 0.000272 ***
+## sexM:charges.na        -9.147e-02  4.116e-02  -2.222 0.026291 *  
+## drg122:charges          1.884e-05  1.706e-06  11.044  < 2e-16 ***
+## drg123:charges          4.665e-05  2.074e-06  22.489  < 2e-16 ***
+## drg122:age             -1.712e-03  7.607e-04  -2.251 0.024396 *  
+## drg123:age             -3.473e-03  1.335e-03  -2.602 0.009275 ** 
+## drg122:charges.na      -1.566e-01  4.248e-02  -3.686 0.000229 ***
+## drg123:charges.na      -6.514e-02  6.815e-02  -0.956 0.339178    
+## charges:age            -2.009e-07  5.760e-08  -3.488 0.000488 ***
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## (Dispersion parameter for Gamma family taken to be 0.2409046)
+## (Dispersion parameter for Gamma family taken to be 0.2609842)
 ## 
 ##     Null deviance: 6557.8  on 12843  degrees of freedom
-## Residual deviance: 3127.4  on 12782  degrees of freedom
-## AIC: 64387
+## Residual deviance: 3270.1  on 12796  degrees of freedom
+## AIC: 64956
 ## 
-## Number of Fisher Scoring iterations: 8
+## Number of Fisher Scoring iterations: 7
 ```
 
 As diagnostics to evaluate the fit of our model, we produced a plot of residual deviance and Cook's distances.
@@ -326,27 +299,21 @@ vif(gamma_model)
 ```
 
 ```
-##                            GVIF Df GVIF^(1/(2*Df))
-## patient            3.620404e+01  1        6.016979
-## diagnosis          4.203666e+07  8        2.995551
-## sex                3.326799e+01  1        5.767841
-## drg                3.955274e+03  2        7.930382
-## charges            6.061380e+01  1        7.785486
-## age                8.553559e+00  1        2.924647
-## charges.na         7.147631e+00  1        2.673505
-## patient:diagnosis  2.606018e+06  8        2.517669
-## patient:sex        5.701344e+00  1        2.387749
-## patient:drg        2.567210e+01  2        2.250947
-## patient:charges    1.046766e+01  1        3.235377
-## patient:charges.na 4.387222e+00  1        2.094570
-## diagnosis:drg      7.783857e+05 16        1.527917
-## diagnosis:charges  3.880752e+05  8        2.235153
-## sex:age            2.778057e+01  1        5.270727
-## sex:charges.na     2.622475e+00  1        1.619406
-## drg:charges        1.235286e+01  2        1.874744
-## drg:age            1.225686e+03  2        5.916908
-## drg:charges.na     2.489633e+00  2        1.256128
-## charges:age        3.600017e+01  1        6.000014
+##                           GVIF Df GVIF^(1/(2*Df))
+## diagnosis         2.292418e+06  8        2.497574
+## sex               3.036608e+01  1        5.510542
+## drg               3.653242e+03  2        7.774449
+## charges           5.383645e+01  1        7.337333
+## age               8.542817e+00  1        2.922810
+## charges.na        3.518046e+00  1        1.875645
+## diagnosis:drg     7.228644e+05 16        1.524388
+## diagnosis:charges 2.723678e+05  8        2.186237
+## sex:age           2.773219e+01  1        5.266136
+## sex:charges.na    2.619160e+00  1        1.618382
+## drg:charges       1.149419e+01  2        1.841279
+## drg:age           1.218950e+03  2        5.908762
+## drg:charges.na    2.452613e+00  2        1.251432
+## charges:age       3.581126e+01  1        5.984251
 ```
 
 There are a number of terms with a GVIF^(1/(2*Df)) greater than $\sqrt{10}$, though we suspect this is due to the presence of interaction terms. We therefore fit the baseline model without interaction terms and redid the VIF inspection.
@@ -354,20 +321,19 @@ There are a number of terms with a GVIF^(1/(2*Df)) greater than $\sqrt{10}$, tho
 
 
 ```r
-baseline_model = glm(formula = los ~ patient + diagnosis + sex + drg + charges + 
+baseline_model = glm(formula = los ~ diagnosis + sex + drg + charges + 
     age + charges.na, family = Gamma(log), data = ami)
 vif(baseline_model)
 ```
 
 ```
 ##                GVIF Df GVIF^(1/(2*Df))
-## patient    1.060016  1        1.029571
-## diagnosis  1.054565  8        1.003326
-## sex        1.103374  1        1.050416
-## drg        1.198773  2        1.046368
-## charges    1.108682  1        1.052940
-## age        1.223877  1        1.106290
-## charges.na 1.001325  1        1.000662
+## diagnosis  1.041196  8        1.002526
+## sex        1.103326  1        1.050393
+## drg        1.197861  2        1.046169
+## charges    1.059859  1        1.029494
+## age        1.223870  1        1.106287
+## charges.na 1.001257  1        1.000629
 ```
 
 These values are all much less than $\sqrt{10}$, suggesting there is no multicollinearity in the base predictors, and the multicollinearity present in the full model comes from the interaction terms.
