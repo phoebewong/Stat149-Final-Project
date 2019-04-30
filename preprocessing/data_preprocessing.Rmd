@@ -1,0 +1,114 @@
+---
+title: "Data Preprocessing"
+author: "Karina Huang"
+date: "4/30/2019"
+output: 
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    fig_width: 6
+    fig_height: 4
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#load packages
+library(dplyr)
+```
+
+# Exploratory Data Analysis 
+
+In accordance with the desciption provided, the current dataset consist of 12,844 observations and 8 variable columns. The variable types are:
+
+  * Patient: integer, patient ID, numbered 1 to 12,844 (DISCRETE, EXCLUDE FROM MODEL)
+  * DIAGNOSIS: integer, 5-digit code indicating the part of heart that was affected (RECODE: CATEGORICAL)
+  * SEX: factor, F for female, M for male (CATEGORICAL)
+  * DRG: integer, code indicating the Diagnosis Related Group (RECODE: CATEGORICAL)
+  * DIED: integer, 1 for patients who died in the hospital, 0 otherwise (REMOVE: REDUNDANT)
+  * CHARGES: integer, total hospital charges in US dollars (CONTINUOUS)
+  * LOS: integer, hospital length of stay in days since admittance (RESPONSE: QUANTITATIVE, DISCRETE/CONTINUOUS)
+  * AGE: integer, age of the patient in years (RESPONSE: QUANTITATVE, DISCRETE/CONTINUOUS)
+  
+```{r}
+#load dataset
+ami <- read.csv('data/amidata.csv')
+#check missing values
+colSums(is.na(ami))
+```
+
+There are 699 missing values from the variable "charges," we used the `na.convert.mean` function from lecture notes to impute the missing values with the mean and contruct and extra column to test the contribution of the missing values to this variable.
+
+```{r, include = FALSE}
+na.convert.mean = function (frame) 
+{
+    vars <- names(frame)
+    if (!is.null(resp <- attr(attr(frame, "terms"), "response"))) {
+        vars <- vars[-resp]
+        x <- frame[[resp]]
+        pos <- is.na(x)
+        if (any(pos)) {
+            frame <- frame[!pos, , drop = FALSE]
+            warning(paste(sum(pos), "observations omitted due to missing values in the response"))
+        }
+    }
+    for (j in vars) {  #j is variable names
+        x <- frame[[j]]
+        pos <- is.na(x)
+        if (any(pos)) {
+            if (length(levels(x))) {   # factors
+                xx <- as.character(x)
+                xx[pos] <- "NA"
+                x <- factor(xx, exclude = NULL)
+            }
+            else if (is.matrix(x)) {   # matrices
+                ats <- attributes(x)
+                x.na <- 1*pos
+#               x[pos] <- 0
+                w <- !pos
+                n <- nrow(x)
+                TT <- array(1, c(1, n))
+                xbar <- (TT %*% x)/(TT %*% w)
+                xbar <- t(TT) %*% xbar
+                x[pos] <- xbar[pos]
+                attributes(x) <- ats
+                attributes(x.na) <- ats
+                dimnames(x.na)[[2]]=paste(dimnames(x)[[2]],".na",sep='')
+                frame[[paste(j,".na",sep='')]] <- x.na 
+            } else {   # ordinary numerical vector
+                ats <- attributes(x)
+                x[pos] <- mean(x[!pos])
+#               x[pos] <- 0
+                x.na <- 1*pos
+                frame[[paste(j,".na",sep='')]] <- x.na 
+                attributes(x) <- ats
+            }
+            frame[[j]] <- x
+        }
+    }
+    frame
+}
+```
+
+```{r, message = FALSE, warning=FALSE}
+#turn variable names to lowercase
+ami.names<-tolower(colnames(ami))
+colnames(ami)<-ami.names
+#impute missing values
+ami <- na.convert.mean(ami)
+#recode variables
+drop <- c('patient','died')
+ami <- ami[, !(names(ami) %in% drop)] %>%
+  mutate(diagnosis = as.factor(diagnosis),
+         drg = as.factor(drg)) 
+#summary statistics
+summary(ami)
+
+#save data into rds
+saveRDS(ami, file = 'data/amidata_cleaned.rds')
+```
+
+
+  

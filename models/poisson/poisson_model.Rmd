@@ -1,0 +1,103 @@
+---
+title: "Poisson"
+author: "Karina Huang"
+date: "4/30/2019"
+output: 
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    fig_width: 6
+    fig_height: 4
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, include = FALSE}
+#load packages
+library(car)
+library(faraway)
+library(dplyr)
+library(utils)
+library(xtable)
+library(ggplot2)
+#load data
+ami <- readRDS(file = 'amidata_cleaned.rds')
+```
+
+# Poisson Regression Model
+
+The reponse variable, Length of Stay (LOS), has a minimum value of 0 and a maximum value of 38. Our first idea is to investigate the poisson model; we did not invetigate the zero-flated model because the current dataset only had 1 observation with a 0 length of stay. It makes sense to model LOS as a Poisson count process because we can treat individual patient as the "confined space," and count how many days (0 or larger) the patient stayed in the hospital since admittance. To select the best-performing model, we used stepwise selection. 
+
+```{r}
+#stepwise model selection for poisson regression model
+best_model <- step(glm(los ~ ., family = 'poisson', data = ami), trace=0, direction='both')
+summary(best_model)
+```
+
+The result above suggested that the full model best predicts the length of stay. The summary suggests that there is potentially a lack of fit by the model as the dispersion parameter approximates $\frac{19630}{12829} \approx 1.52$, rather than $\phi = 1$, which is assumed by the Poisson regression model. The diagnostic plots below do not suggest any significant influential observations. However, the residual vs. fitted plot suggests our model lack fit because the residuals display a fan-like pattern with values beyond the acceptable -2 and 2 bound.
+
+```{r}
+par(mfrow=c(1,1))
+#rvf
+plot(residuals(best_model)~fitted(best_model),
+     xlab="Fitted Values",
+     ylab="Residual Values", 
+     main="RVF Plot for the Poisson Model")
+abline(h=-2,lty=2,col="red")
+abline(h=2,lty=2,col="red")
+
+
+#plot cook's distance
+plot(cooks.distance(best_model), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's distances for the Poisson Model")
+abline(h=1,lty=2,col="red")
+```
+
+The grouped variance inflation factors do not suggest any issue with multicollinearity.
+
+```{r}
+#check vif
+car::vif(best_model)
+```
+
+
+# Adding Interaction Terms
+
+In this section we explore the effect of introducing interaction terms to our model. The motivation behind this is that some of our predictor variables could be interacting with each other to affect patients' length of stay. Because our model includes primarily categorical predictors, we only explored 2-way interactions. 
+
+```{r}
+# With interaction terms
+best_int <- step(glm(los ~ .^2, family = 'poisson', data = ami), trace=0, direction='both')
+summary(best_int)
+```
+
+The best model with interaction suggested by the stepwise selection process includes all interactions, except those between sex and drug, and sex and diagnosis. However, the dispersion factor approximation also appears to be off the chart as $\hat{\phi} \approx \frac{18945}{12788} \approx 1.48$. The diagnostic below renders the same conclusions as above.
+
+```{r}
+par(mfrow=c(1,1))
+#rvf
+plot(residuals(best_int)~fitted(best_int),
+     xlab="Fitted Values",
+     ylab="Residual Values", 
+     main="RVF Plot for the Poisson Model with Interactions")
+abline(h=-2,lty=2,col="red")
+abline(h=2,lty=2,col="red")
+
+
+#plot cook's distance
+plot(cooks.distance(best_int), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's distances for the Poisson Model with Interactions")
+abline(h=1,lty=2,col="red")
+```
+
+
+
