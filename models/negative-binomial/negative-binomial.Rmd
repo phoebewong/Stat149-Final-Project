@@ -1,0 +1,108 @@
+---
+title: "negative-binomial"
+author: "Phoebe Wong"
+date: "4/29/2019"
+output: 
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    fig_width: 6
+    fig_height: 4
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(MASS)
+library(car)
+```
+
+# Preprocessing
+- mean-imputed on charges and added charges.na
+- Drop `Patient` ID column because of irrelevance
+- Drop `DIED` column because of perfect colinearity with `DRG` (`DRG` == 123 when `DIED` == 1) 
+```{r load-data}
+ami <- readRDS("../../data/amidata_clean.rds") %>%
+  dplyr::select(-one_of(c("patient", "died")))# drop patient ID column
+
+# ami[ami$los == 0, ]
+table(ami$los)[1:15]
+```
+
+# Model on mean-imputed data
+```{r step-noint}
+step_noint <- step(glm.nb(los ~ .,  data=ami), trace=0, direction='both')
+step_noint
+```
+
+We then fit the negative binomial model with the variables picked by the stepwise regression
+(`r as.character(formula(step_noint))[3]`)
+
+```{r}
+mod_nb_noint <- glm.nb(formula(step_noint), data = ami)
+summary(mod_nb_noint)
+```
+Because both `charges` and `charges.na` are significant predictors in the model, we proceeded with the data with mean-imputed missing values.
+
+The ratio of residual deviance to residual degrees of freedom (12832/12829) indicates a good fit of the model to the data.
+
+```{r step-withint}
+step_withint <- step(glm.nb(los ~ .^2.,  data=ami), trace=0, direction='both')
+step_withint
+```
+
+We then fit the negative binomial model with the variables picked by the stepwise regression
+(`r as.character(formula(step_withint))[3]`)
+
+```{r mod-withint}
+mod_nb_withint <- glm.nb(formula(step_withint), data = ami)
+summary(mod_nb_withint)
+```
+
+Note that `charges` and `charges.na` are both significant in this model. 
+
+The ratio of residual deviance to residual degrees of freedom (12733/12768) indicates a good fit of the model to the data.
+
+# Likelihood ratio test of the two models
+```{r anova}
+anova(mod_nb_noint, mod_nb_withint)
+```
+
+From the above likelihood ratio test, we can see that the model with interaction terms is significantly different than the model without interaction terms. Therefore, we proceed with the model with interaction terms
+
+# Model Diagnosis
+## Residual plot and Cook's Distance
+```{r res-plot}
+par(mfrow=c(1,2))
+# Residuals plot
+plot(residuals(mod_nb_withint)~fitted(mod_nb_withint),
+     xlab="Fitted Values",
+     ylab="Residual Values", 
+     main="Residual vs. Fitted Values Plot")
+abline(h = -2, lty = 2, col = 'red')
+abline(h = 2, lty = 2, col = 'red')
+
+plot(cooks.distance(mod_nb_withint), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's Distances Plot")
+abline(h=1,lty=2,col="red")
+```
+
+## Colinearity
+
+```{r}
+car::vif(mod_nb_withint)
+```
+
+There are a number of terms with a GVIF^(1/(2*Df)) greater than $\sqrt{10}$ (3.16), though we suspect this is due to the presence of interaction terms. We therefore fit the baseline model without interaction terms and redid the VIF inspection.
+
+```{r}
+model_noint_baseline = glm.nb(formula = los ~ diagnosis + sex + drg + charges + age + charges.na , data = ami)
+car::vif(model_noint_baseline)
+```
+
+These values are all much less than $\sqrt{10}$, suggesting there is no multicollinearity in the base predictors, and the multicollinearity present in the full model comes from the interaction terms.
