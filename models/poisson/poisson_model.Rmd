@@ -15,9 +15,6 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
-
-```{r, echo = FALSE, message = FALSE, warning = FALSE, include = FALSE}
 #load packages
 library(car)
 library(faraway)
@@ -25,21 +22,31 @@ library(dplyr)
 library(utils)
 library(xtable)
 library(ggplot2)
-#load data
-ami <- readRDS(file = 'amidata_cleaned.rds')
+library(mgcv)
+library(tidymodels)
 ```
 
-# Poisson Regression Model
+```{r, echo = FALSE, message = FALSE, warning = FALSE, include = FALSE}
+#load data
+ami <- readRDS(file = '../../data/amidata_clean.rds')
+ami <- ami[,!(names(ami) %in% c('patient', 'died'))]
+set.seed(42)
+ami_split <- initial_split(ami, prop = .8, strata = "los") # Stratified sampling based on LOS
+ami_train <- training(ami_split)
+ami_test  <- testing(ami_split)
+```
+
+## Poisson Regression Model
 
 The reponse variable, Length of Stay (LOS), has a minimum value of 0 and a maximum value of 38. Our first idea is to investigate the poisson model; we did not invetigate the zero-flated model because the current dataset only had 1 observation with a 0 length of stay. It makes sense to model LOS as a Poisson count process because we can treat individual patient as the "confined space," and count how many days (0 or larger) the patient stayed in the hospital since admittance. To select the best-performing model, we used stepwise selection. 
 
 ```{r}
 #stepwise model selection for poisson regression model
-best_model <- step(glm(los ~ ., family = 'poisson', data = ami), trace=0, direction='both')
+best_model <- stats::step(glm(los ~ ., family = 'poisson', data = ami_train), trace=0, direction='both')
 summary(best_model)
 ```
 
-The result above suggested that the full model best predicts the length of stay. The summary suggests that there is potentially a lack of fit by the model as the dispersion parameter approximates $\frac{19630}{12829} \approx 1.52$, rather than $\phi = 1$, which is assumed by the Poisson regression model. The diagnostic plots below do not suggest any significant influential observations. However, the residual vs. fitted plot suggests our model lack fit because the residuals display a fan-like pattern with values beyond the acceptable -2 and 2 bound.
+The result above suggested that the full model best predicts the length of stay. The summary suggests that there is potentially a lack of fit by the model as the dispersion parameter approximates $\frac{15704}{10264} \approx 1.53$, rather than $\phi = 1$, which is assumed by the Poisson regression model. The diagnostic plots below do not suggest any significant influential observations. However, the residual vs. fitted plot suggests our model lack fit because the residuals display a fan-like pattern with values beyond the acceptable -2 and 2 bound.
 
 ```{r}
 par(mfrow=c(1,1))
@@ -60,25 +67,31 @@ plot(cooks.distance(best_model), type="h", lwd=2,
 abline(h=1,lty=2,col="red")
 ```
 
-The grouped variance inflation factors do not suggest any issue with multicollinearity.
+The grouped variance inflation factors do not suggest any issue with multicollinearity. The root mean squared error on test set prediction is 3.73.
 
 ```{r}
 #check vif
 car::vif(best_model)
 ```
 
+```{r}
+#check test performance of best model selected above
+best_model_pred <- predict(best_model, ami_test, type = 'response')
+rmse_vec(ami_test$los, best_model_pred)
+```
 
-# Adding Interaction Terms
+
+## Adding Interaction Terms
 
 In this section we explore the effect of introducing interaction terms to our model. The motivation behind this is that some of our predictor variables could be interacting with each other to affect patients' length of stay. Because our model includes primarily categorical predictors, we only explored 2-way interactions. 
 
 ```{r}
 # With interaction terms
-best_int <- step(glm(los ~ .^2, family = 'poisson', data = ami), trace=0, direction='both')
+best_int <- stats::step(glm(los ~ .^2, family = 'poisson', data = ami_train), trace=0, direction='both')
 summary(best_int)
 ```
 
-The best model with interaction suggested by the stepwise selection process includes all interactions, except those between sex and drug, and sex and diagnosis. However, the dispersion factor approximation also appears to be off the chart as $\hat{\phi} \approx \frac{18945}{12788} \approx 1.48$. The diagnostic below renders the same conclusions as above.
+The best model with interaction suggested by the stepwise selection process includes all interactions, except those between sex and drug, and sex and diagnosis. However, the dispersion factor approximation also appears to be off the chart as $\hat{\phi} \approx \frac{15088}{10230} \approx 1.47$. The diagnostic below renders the same conclusions as above. RMSE on test set is slightly higher than that rendered by the model without interaction terms.
 
 ```{r}
 par(mfrow=c(1,1))
@@ -99,5 +112,63 @@ plot(cooks.distance(best_int), type="h", lwd=2,
 abline(h=1,lty=2,col="red")
 ```
 
+```{r}
+#check test performance of best interaction model selected above
+best_int_pred <- predict(best_int, ami_test, type = 'response')
+rmse_vec(ami_test$los, best_int_pred)
+```
+
+The analysis of deviance test below suggests that the interaction terms do introduce significant information to the model. However, given the diagnostic plots and RMSE results above, we should keep investigating other model.
+
+```{r}
+#compare model with and without interactions
+anova(best_model, best_int, test = 'Chi')
+```
 
 
+## Generative Additive Model
+
+```{r}
+head(ami_train)
+```
+
+```{r}
+gam_full <- gam(los ~ s(charges) + s(age) + diagnosis + sex + drg + charges.na, family = 'poisson', data = ami_train)
+summary(gam_full)
+```
+
+The summary of the GAM model above suggests non-linear relationships between age, charges and our response variable. Comparing the full gam model with the glm model without interaction terms selected above, we see that at least one of the predictors, charges/age, contributes significantly and non-linearly in predicting partients' length of stay in the hospital. 
+
+```{r}
+#compare gam and glm
+anova(best_model, gam_full, test = 'Chi')
+```
+
+```{r}
+plot(gam_full, residuals = TRUE, shade=TRUE, shade.col = 2)
+```
+
+```{r}
+#check test performance of gam
+gam_pred <- predict(gam_full, ami_test, type = 'response')
+rmse_vec(ami_test$los, gam_pred)
+```
+
+```{r}
+par(mfrow=c(1,1))
+#rvf
+plot(residuals(gam_full)~fitted(gam_full),
+     xlab="Fitted Values",
+     ylab="Residual Values", 
+     main="RVF Plot for the GAM Poisson Model")
+abline(h=-2,lty=2,col="red")
+abline(h=2,lty=2,col="red")
+
+
+#plot cook's distance
+plot(cooks.distance(gam_full), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's distances for the GAM Poisson Model")
+abline(h=1,lty=2,col="red")
+```
