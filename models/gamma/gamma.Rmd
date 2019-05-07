@@ -107,12 +107,11 @@ As diagnostics to evaluate the fit of our model, we produced a plot of residual 
 ```{r fig.height=6, fig.width=10}
 par(mfrow=c(1,2))
 # Residuals plot
-plot(residuals(gamma_model)~fitted(gamma_model),
-     xlab="Fitted Values",
-     ylab="Residual Values", 
-     main="Residual vs. Fitted Values Plot")
-abline(h = -2, lty = 2, col = 'red')
-abline(h = 2, lty = 2, col = 'red')
+gamma.fitted = fitted(gamma_model)
+gamma.devresid = residuals(gamma_model, type="deviance")
+#postscript(file="meat-resid.ps", hori=T)
+plot(gamma.fitted, gamma.devresid, xlab="Fitted counts", ylab="Deviance residuals", pch=19, col="red", cex=1.5, main="Fitted vs deviance residual plotfor ants per sandwich model")
+abline(h=0,lty=2,col="green")
 # Cook's distance plot
 plot(cooks.distance(gamma_model), type="h", lwd=2,
   xlab="Observation index",
