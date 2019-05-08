@@ -264,9 +264,16 @@ abline(h=1,lty=2,col="red")
 ```
 
 The fitted counts and the nonlinearity of the residuals improves a lot with the addition of the smooths!
+```{r}
+# Training Set evaluation
+train_pred <- predict(gamma_gam, ami_train %>% dplyr::select(-los), type = "response")
+rmse_vec(ami_train$los, train_pred)
+```
+
 
 ```{r}
-pred <- predict(gamma_gam, ami_test %>% dplyr::select(-los), type = "response")
-rmse_vec(ami_test$los, pred)
+# Test Set evaluation
+test_pred <- predict(gamma_gam, ami_test %>% dplyr::select(-los), type = "response")
+rmse_vec(ami_test$los, test_pred)
 ```
 
