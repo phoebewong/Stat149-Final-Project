@@ -17,9 +17,41 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 # Abstract
 
-This R markdown file serves to fit a Guassian model to the response data. The motivation for this is because the response variable exhibits right-skewness. See the exploratory data analysis notebook for visuals in support of this claim.
+This R markdown file serves to fit a Gamma model to the response data. The motivation for this is because the response variable exhibits right-skewness. See the exploratory data analysis notebook for visuals in support of this claim.
+
+```{r message=FALSE, warning=FALSE}
+library(mgcv)
+library(tidymodels)
+library(ggplot2)
+library(car)
+```
+
+
+# Pre-Processing
+- mean-imputed on charges and added charges.na
+- Drop `Patient` ID column because of irrelevance
+- Drop `DIED` column because of perfect colinearity with `DRG` (`DRG` == 123 when `DIED` == 1) 
+
+```{r}
+ami_init = readRDS("../../data/amidata_clean.rds")
+drops <- c("patient","died")
+ami = ami_init[ , !(names(ami_init) %in% drops)]
+```
+
+## Cross-validation
+- We split the data with 80% in training set and 20% on a held-out test set for model evaluation. We set the random seed at 42 to ensure consistency across models.
+
+```{r message=FALSE, warning=FALSE}
+# Split data
+set.seed(42)
+ami_split <- initial_split(ami, prop = .8, strata = "los") # Stratified sampling based on LOS
+ami_train <- training(ami_split)
+ami_test  <- testing(ami_split)
+```
+
 
 # Fitting the Gamma GLM
 
@@ -29,7 +61,6 @@ Before we can fit the Gamma GLM, we need to deal with the one observation that h
 
 
 ```{r}
-ami = readRDS("../../data/amidata_clean.rds")
 ami[ami$los == 0, ]
 table(ami$los)[1:15]
 ```
@@ -39,7 +70,6 @@ From the information about the zero-valued datapoint, we do not see anything tha
 
 ```{r message=FALSE}
 # Examination of diagnosis
-library(ggplot2)
 ggplot(data=ami, aes(x=los)) +
     geom_histogram(data=subset(ami, diagnosis == 41091), aes(fill='41091'), alpha = 0.2) +
     geom_histogram(alpha = 0.2, aes(fill='All')) + 
@@ -51,7 +81,7 @@ The results indicate that the diagnosis is representative of the overall populat
 We can also look at the length of stay for the patients who died to see if there is a peak at 1 day. Our suspicion is that of the patients who died, a considerable number of them would have died the same day, as survival is extremely short-term when the heart stops beating. 
 
 ```{r}
-hist(subset(ami$los, ami$died == 1), breaks=40, 
+hist(subset(ami_init$los, ami_init$died == 1), breaks=40, 
      xlab='Length of Stay', main='Histogram of Length of Stay Given Patient Died')
 ```
 
@@ -72,48 +102,71 @@ We also considered the option of fitting a hurdle model to the data, where the z
 Ultimately, we chose to round the zero-valued datapoint to 1. This decision was motivated in large part by the mechanics of what would happen to a Gamma model prediction that was close to 0 (we would end up rounding this value to the nearest positive integer anyway), and also from the fact that removing a single, non-influential (none of the feature values were extreme) datatpoint from a dataset of more than 12,000 patients will have little to no effect on the predictions of our model. 
 
 ```{r}
-ami$los[ami$los == 0] = 1
+ami_train$los[ami_train$los == 0] = 1
+ami_test$los[ami_test$los == 0] = 1
 ```
 
 ### Feature Selection
 
 We chose our best fit model using stepwise feature selection. The stepwise regression uses an iterative forward/backward selection method and the AIC criterion to choose the best model. To get a baseline, we first ran stepwise feature selection without interaction terms. Note, we removed patient id since there should be no causal connection between the patient id and the length of stay if the data were appropriately randomized.
 
-```{r}
+```{r, eval=FALSE}
 # Without interaction terms
-step(glm(los ~ .-patient, family=Gamma(log), data=ami), trace=0, direction='both')
-```
-
-The results indicate that the ```died``` feature did not improve the model fit to where it was warranted including it as an extra predictor. Next, we ran stepwise feature selection with all the interaction terms considered (of which there are many due to the multi-level factors in our dataset), to compare with our baseline.  
-
-```{r}
+step_noint = stats::step(glm(los ~ ., family=Gamma(log), data=ami_train), trace=0, direction='both')
 # With interaction terms
-step(glm(los ~ (.-patient)^2, family=Gamma(log), data=ami), trace=0, direction='both')
+step_int = stats::step(glm(los ~ .^2, family=Gamma(log), data=ami_train), trace=0, direction='both')
+
+# Save model
+save(step_noint, file = 'step_noint.rds')
+save(step_int, file = "step_int.rds")
 ```
 
-As we can see from the step function output, the addition of a handful of interaction terms between ```diagnosis```, ```age```, ```charges```, ```drg```, and ```charges.na```. Next, we ran the model with these specified interaction to obtain the following fit.
+Next, we ran stepwise feature selection with all the interaction terms considered (of which there are many due to the multi-level factors in our dataset), to compare with our baseline.  
 
+```{r load-model, include=FALSE}
+# Load pre-trained model
+load('step_noint.rds')
+load('step_int.rds')
+```
+
+We then examined the summaries of both models.
 
 ```{r}
-gamma_model = glm(formula = los ~ diagnosis + sex + drg + charges + age + charges.na + 
-    diagnosis:drg + diagnosis:charges + sex:age + sex:charges.na + 
-    drg:charges + drg:age + drg:charges.na + charges:age, family = Gamma(log), 
-    data = ami)
-summary(gamma_model)
+# No interaction model
+gamma_noint = glm(formula = formula(step_noint), family = Gamma(log), data = ami_train)
+summary(gamma_noint)
 ```
+
+```{r}
+# Interaction model
+gamma_int = glm(formula = formula(step_int), family = Gamma(log), data = ami_train)
+summary(gamma_int)
+```
+
+In both model summaries, ```charges``` and ```charges.na``` appear to be significant predictors. Therefore we decided to keep the imputation as a part of the model. 
+
+We carried out a likelihood ratio test to see whether the model with interaction terms results in a significantly better fit.
+
+```{r}
+anova(gamma_noint, gamma_int, test='Chisq')
+```
+
+The likelihood ratio test indicates that the model with interaction terms has significantly less residual deviance than the model without, therefore we chose to continue our analysis with the interaction model.
 
 As diagnostics to evaluate the fit of our model, we produced a plot of residual deviance and Cook's distances.
 
 ```{r fig.height=6, fig.width=10}
 par(mfrow=c(1,2))
 # Residuals plot
-gamma.fitted = fitted(gamma_model)
-gamma.devresid = residuals(gamma_model, type="deviance")
-#postscript(file="meat-resid.ps", hori=T)
-plot(gamma.fitted, gamma.devresid, xlab="Fitted counts", ylab="Deviance residuals", pch=19, col="red", cex=1.5, main="Fitted vs deviance residual plotfor ants per sandwich model")
-abline(h=0,lty=2,col="green")
+gamma.fitted = fitted(gamma_int)
+gamma.devresid = residuals(gamma_int, type="deviance")
+plot(gamma.fitted, gamma.devresid, xlab="Fitted counts", ylab="Deviance residuals", pch=19, col="red", cex=1.5, main="Gamma: Fitted vs Deviance Residual Plot")
+abline(h=0,lty=2,col="black")
+abline(h=2,lty=2,col="black")
+abline(h=-2,lty=2,col="black")
+
 # Cook's distance plot
-plot(cooks.distance(gamma_model), type="h", lwd=2,
+plot(cooks.distance(gamma_int), type="h", lwd=2,
   xlab="Observation index",
   ylab="Cook's distances",
   main="Cook's Distances Plot")
@@ -121,24 +174,106 @@ abline(h=1,lty=2,col="red")
 ```
 
 
-The residuals plot indicates there are a handful of outliers that breach the +/- 2 threshold, but the Cook's distance plot shows there are no influential points of note. 
+We expect the deviance residuals to approximately follow a standard normal distribution. The residuals plot indicates that the spread of the residuals does stay within the +/- 2 threshold, but they are not symmetrically scattered. In particular, it seems like the Gamma model severely overestimates the length of stay for larger points, predicting values as high as 200 days when the maximum observed value is 38 days. The Cook's distance plot shows there are no influential points of note. 
 
 Finally, we examined the potential for collinearity using the Variance Inflation Factor (VIF).
 
 ```{r message=FALSE, warning=FALSE}
-library(car)
-vif(gamma_model)
+vif(gamma_int)
 ```
 
 There are a number of terms with a GVIF^(1/(2*Df)) greater than $\sqrt{10}$, though we suspect this is due to the presence of interaction terms. We therefore fit the baseline model without interaction terms and redid the VIF inspection.
 
-
 ```{r}
 baseline_model = glm(formula = los ~ diagnosis + sex + drg + charges + 
-    age + charges.na, family = Gamma(log), data = ami)
+    age + charges.na, family = Gamma(log), data = ami_train)
 vif(baseline_model)
 ```
 
 These values are all much less than $\sqrt{10}$, suggesting there is no multicollinearity in the base predictors, and the multicollinearity present in the full model comes from the interaction terms.
 
+# GAM Model
+
+We also explored using a Generalized Additive Model where we explore the application of nonlinear smooths to our GLM predictors. We can write out our linear predictor as following.
+
+$g(\mu_i) = \beta_0 + S_1(x_{i1}) + ... +S_j(x_{ij})$
+
+Individual $S_j$ functions refer to smooths applied to predictors.
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+# GAM
+gamma_gam = gam(formula = los ~ diagnosis + sex + drg + s(charges) + s(age)
+                + charges.na + diagnosis:drg + diagnosis:charges + sex:age
+                + drg:charges + drg:age + drg:charges.na + charges:age, data = ami_train, family = Gamma(log))
+
+save(gamma_gam, file='gamma_gam.rds')
+```
+
+```{r}
+
+load('gamma_gam.rds')
+summary(gamma_gam)
+```
+
+
+We then perform a likelihood ratio between GLM and GAM to determine our final model for negative binomial model family. We needed to refit the GAM as a `glm` object, because of the limitation in `anova()` in R. We refitted the GAM using the same predictor and non-linear transformation suggested in the GAM model.
+
+```{r}
+# refit gam to fit into anova
+ami_train <- ami_train %>% 
+  mutate(
+    charges_7 = (charges - mean(charges)) ^ 7,
+    age_3 = (age - mean(age)) ^ 3
+  )
+
+# update formula to be glm
+newvars <- c("charges_7", "age_3")
+gam_glm_form <- attr(gamma_gam$terms, "term.labels") %>% 
+  paste(., collapse = "+") %>% 
+  paste(., paste(newvars, collapse ="+"), sep = "+") %>% 
+  paste("los ~", .)
+
+# Refit a glm with GAM variables
+gamma_gam_glm <- glm(formula(gam_glm_form), data = ami_train, family=Gamma(log))
+anova(gamma_int, gamma_gam_glm, test = "Chisq")
+```
+
+The results of the likelihood ratio test indicate that the GAM model with interaction terms is significantly better than the GLM with interaction terms.
+
+```{r}
+plot(gamma_gam, residuals = TRUE, shade=TRUE, shade.col = 2)
+```
+
+```{r fig.height=6, fig.width=10}
+par(mfrow=c(1,2))
+# Residuals plot
+gamma.fitted = fitted(gamma_gam)
+gamma.devresid = residuals(gamma_gam, type="deviance")
+plot(gamma.fitted, gamma.devresid, xlab="Fitted counts", ylab="Deviance residuals", pch=19, col="red", cex=1.5, main="Gamma: Fitted vs Deviance Residual Plot")
+abline(h=0,lty=2,col="black")
+abline(h=2,lty=2,col="black")
+abline(h=-2,lty=2,col="black")
+
+# Cook's distance plot
+plot(cooks.distance(gamma_gam), type="h", lwd=2,
+  xlab="Observation index",
+  ylab="Cook's distances",
+  main="Cook's Distances Plot")
+abline(h=1,lty=2,col="red")
+```
+
+The fitted counts and the nonlinearity of the residuals improves a lot with the addition of the smooths!
+```{r}
+# Training Set evaluation
+train_pred <- predict(gamma_gam, ami_train %>% dplyr::select(-los), type = "response")
+rmse_vec(ami_train$los, train_pred)
+```
+
+
+```{r}
+# Test Set evaluation
+test_pred <- predict(gamma_gam, ami_test %>% dplyr::select(-los), type = "response")
+rmse_vec(ami_test$los, test_pred)
+```
 
