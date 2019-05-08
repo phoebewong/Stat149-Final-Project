@@ -53,7 +53,7 @@ par(mfrow=c(1,1))
 #rvf
 plot(residuals(best_model)~fitted(best_model),
      xlab="Fitted Values",
-     ylab="Residual Values", 
+     ylab="Deviance Residuals", 
      main="RVF Plot for the Poisson Model")
 abline(h=-2,lty=2,col="red")
 abline(h=2,lty=2,col="red")
@@ -133,19 +133,46 @@ head(ami_train)
 ```
 
 ```{r}
-gam_full <- gam(los ~ s(charges) + s(age) + diagnosis + sex + drg + charges.na, family = 'poisson', data = ami_train)
+gam_full <- gam(los ~ s(charges) + s(age) + diagnosis + sex + drg + charges.na + diagnosis:drg + 
+                  diagnosis:charges + sex:charges + sex:age + sex:charges.na + 
+                  drg:charges + drg:age + drg:charges.na + charges:age, family = 'poisson', data = ami_train)
 summary(gam_full)
+```
+
+```{r}
+save(gam_full, file = 'poisson_gam.rds')
 ```
 
 The summary of the GAM model above suggests non-linear relationships between age, charges and our response variable. Comparing the full gam model with the glm model without interaction terms selected above, we see that at least one of the predictors, charges/age, contributes significantly and non-linearly in predicting partients' length of stay in the hospital. 
 
 ```{r}
-#compare gam and glm
-anova(best_model, gam_full, test = 'Chi')
+# refit gam to fit into anova
+ami_train <- ami_train %>% 
+  mutate(
+    charges_8 = (charges - mean(charges)) ^ 8,
+    age_8 = (age - mean(age)) ^ 8
+  )
+
+# update formula to be glm
+newvars <- c("charges_8", "age_8")
+gam_glm_form <- attr(gam_full$terms, "term.labels") %>% 
+  paste(., collapse = "+") %>% 
+  paste(., paste(newvars, collapse ="+"), sep = "+") %>% 
+  paste("los ~", .)
+
+# Refit a glm with GAM variables
+poisson_gam_glm <- glm(formula(gam_glm_form), data = ami_train, family='poisson')
+anova(best_int, poisson_gam_glm , test = "Chisq")
 ```
 
 ```{r}
 plot(gam_full, residuals = TRUE, shade=TRUE, shade.col = 2)
+```
+
+```{r}
+#check training performance of gam
+gam_pred <- predict(gam_full, ami_train, type = 'response')
+rmse_vec(ami_train$los, gam_pred)
 ```
 
 ```{r}
