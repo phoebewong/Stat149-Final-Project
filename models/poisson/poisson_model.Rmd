@@ -154,6 +154,7 @@ gam_pred <- predict(gam_full, ami_test, type = 'response')
 rmse_vec(ami_test$los, gam_pred)
 ```
 
+
 ```{r}
 par(mfrow=c(1,1))
 #rvf
