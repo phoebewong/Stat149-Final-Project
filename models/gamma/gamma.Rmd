@@ -220,23 +220,8 @@ summary(gamma_gam)
 We then perform a likelihood ratio between GLM and GAM to determine our final model for negative binomial model family. We needed to refit the GAM as a `glm` object, because of the limitation in `anova()` in R. We refitted the GAM using the same predictor and non-linear transformation suggested in the GAM model.
 
 ```{r}
-# refit gam to fit into anova
-ami_train <- ami_train %>% 
-  mutate(
-    charges_7 = (charges - mean(charges)) ^ 7,
-    age_3 = (age - mean(age)) ^ 3
-  )
-
-# update formula to be glm
-newvars <- c("charges_7", "age_3")
-gam_glm_form <- attr(gamma_gam$terms, "term.labels") %>% 
-  paste(., collapse = "+") %>% 
-  paste(., paste(newvars, collapse ="+"), sep = "+") %>% 
-  paste("los ~", .)
-
-# Refit a glm with GAM variables
-gamma_gam_glm <- glm(formula(gam_glm_form), data = ami_train, family=Gamma(log))
-anova(gamma_int, gamma_gam_glm, test = "Chisq")
+# ANOVA between GLM and GAM 
+anova(gamma_int, gamma_gam, test='Chisq')
 ```
 
 The results of the likelihood ratio test indicate that the GAM model with interaction terms is significantly better than the GLM with interaction terms.
